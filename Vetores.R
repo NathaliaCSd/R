@@ -105,3 +105,36 @@ ret
 indexes = c(4,rep(x=2,times=3), 1,1,2,3:1)
 indexes
 
+#reescreve certos elementos do vetor
+bar = c(3,2,4,4,1,2,4,1,0,0,5)
+bar
+
+bar[1] = 6;
+bar
+
+#substitui o segundo, quarto e sexto elemento
+bar[c(2,4,6)] = c(-2,-0.5,-1)
+bar
+
+#operacoes com vetores
+foo = 5.5:0.5
+foo 
+
+foo - c(2,4,6,8,10,12)
+
+baz = c(1,-1,0.5,-0.5,1,1)
+foo*baz
+
+qux = 3
+foo + qux
+
+#mesma coisa que fazer 
+foo + rep(x=3,times=length(x=foo))
+
+#soma de todos os elementos do vetor
+sum(foo)
+
+#produto de todos os elementos do vetor
+prod(foo)
+
+
