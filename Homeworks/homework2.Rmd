@@ -1,0 +1,130 @@
+---
+title: "HomeWork2"
+author: "NathaliaCristinaSantos"
+date: "2025-05-31"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+LISTA ARMA: TEORICA 
+
+1) Suponha que a série diária de log-retorno de um ativo,siga o seguinte modelo: yt = 0.01 + 0.2yt-2 + et
+Onde e_t é um ruído branco Gaussiano com média zero e variância 0.02
+
+```{r setup, include=FALSE}
+#declarando os parametros do modelo 
+phi1 <- 0
+phi2 <- 0.2
+constante <- 0.01 
+sigma_eps2 <- 0.02 #varianca do ruido e_t
+sigma_eps <- sqrt(sigma_eps2) #desvio padrao do ruido
+
+#printando o valor calculado do desvio
+sigma_eps
+```
+
+
+Agora calcularemos a a media teorica 
+
+a)
+```{r}
+#Cálculo de µ
+mu_teo <- constante / (1 - phi2)
+mu_teo
+```
+
+e a varianca da série de retornos 
+```{r}
+#Cálculo de Var(y_t)
+var_teo <- sigma_eps2 / (1 - phi2^2)
+var_teo
+```
+
+
+b) Cálculo das autocorrelacoes p(1) e p(2)
+
+Necessário o pacote status presente no ambiente
+```{r}
+library(stats)
+```
+
+No modelo dado, as variaveis sao: q1=0 e q2=0.2
+
+Para este calculo, será usada a funcao ARMAacf. 
+```{r}
+acf_teo <- ARMAacf(ar = c(phi1, phi2), ma = 0, lag.max = 2)
+#em R os indices iniciam em 0... 
+rho0 <- acf_teo[1]
+rho1 <- acf_teo[2]
+rho2 <- acf_teo[3]
+
+rho1
+rho2
+
+```
+
+) Calculando a previsão um passo à frente da série de retornos a
+partir da origem t = 100.
+
+```{r}
+y99 <- 0.02
+y100 <- -0.01
+```
+
+previsao 1 passo à frente
+```{r}
+y101_hat <- constante + phi2 * y99
+y101_hat
+```
+
+previsao de 2 passos à frente (102, como a origem é 100)
+```{r}
+y102_hat <- constante + phi2 * y100
+y102_hat
+```
+
+
+
+2. Descreva como as FAC e FACP sao uteis para identificar um modelo ARMA. Como os criterios de informacao podem ser usados na construcao de um modelo?
+
+  Ao plotar graficos com FAC(autocorrelacao) e FACP(autocorrelacao parcial), é possivel fazer uma avaliacao visual inicial; Se FAC cai rápido: pode ser MA.
+                  Se FACP cai(apresenta um corte no lag) rápido: pode ser AR.
+                  Se nenhum dos dois cai rápido: pode ser ARMA.
+  Isso claro para uma avaliacao inicial, sendo necessário outros calculos complexos para uma decisao definitiva. 
+  Os critérios de informação sao:
+  AIC (Akaike) , BIC (Schwarz)
+    E para cada modelo candidato( AR(1), MA(1), ARMA(1,1) etc.), é necessario um ajuste, e calculado o valor de AIC e de BIC. Quanto menor o AIC (ou BIC), melhor é o equilíbrio entre “ajuste bom” e “modelo simples”. 
+    Escolhe-se o modelo que tiver o menor IC (ou AIC). 
+    Se os dois possuirem valores parecidos, pode-se preferir o que for mais simples (tiver menos parametros)
+  A FAC e FACP são como bússulas visuais que norteiam e apontam o tipo de dependencia temporal (AR ou MA). Já os criterios de informacao, que tem o mesmo resultado de decisao, possuem um modo mais formal e quantitativo(numerico), para qual o modelo. Entre FAC, FACP e criterios de informacao, os criterios de informacao apresenta melhor trade-off entre ajuste e complexidade. 
+
+
+
+3. Seja a FAC e FACP (ACF e PACF em ingles, respectivamente) de uma serie de log-retornos mostrada na pagina seguinte. Qual seria um modelo do tipo ARMA razoavel para descrever a dinamica dessa serie? Como voce poderia verificar se o modelo escolhido eh adequado? NOTA: As FAC e FACP mostradas abaixo, comecam no lag = zero. Entao, o primeiro elemento eh a autocorrelacao de ordem zero, que deve ser desconsiderada para a analise proposta.
+
+
+na FAC: nao ha um ponto onde a acf corte rapidamente para zero, por isso pode ser caracterizado como um processo AR
+na FACP: é possivel ver uma correlacao no lag 1, onde é possivel ver uma barra acima da banda de confianca. 
+Por isso, propoe-se que se trata de um processo AR(1), em codigo demonstrativo em R:
+
+ 1. Ajustar AR(1)
+ 
+sendo logret uma variavel referente a serie de log retornos a serem usados no calculo. 
+ou seja, logret deve conter os valores reais de log‐retornos
+ 
+fit_ar1 <- arima(logret, order = c(1,0,0))
+
+ 2. Inspecionar coeficiente e intercepto
+fit_ar1
+
+3. Ver ACF dos resíduos
+resid_ar1 <- residuals(fit_ar1)
+acf(resid_ar1, lag.max = 20, na.action = na.exclude)  
+Idealmente, todas as barras devem ficar dentro das linhas azuis
+
+4. Teste de Ljung–Box
+Box.test(resid_ar1, lag = 20, type = "Ljung-Box")
+  p‐valor alto (ex.: 0.30) significa que não há autocorrelação significativa nos resíduos.
+
+Se fit_ar1 apresentar menor AIC/BIC e os resíduos não mostrarem autocorrelação, concluímos que AR(1) é de fato adequado!

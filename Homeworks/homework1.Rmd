@@ -1,0 +1,254 @@
+---
+Universidade Federal de Sao Carlos
+Departamento de Economia
+Econometria Financeira: Analise de Series Temporais usando o R
+Profa. Dra. Andreza A. Palma
+
+Nathalia Cristina Santos 795698
+title: "Homework 1"
+
+output: html_notebook
+---
+
+Analisar quatro variáveis do Yahoo Finance e verificar os fatos estilizados de séries temporais financeiras
+
+importando o pacote yahoo finance e instalando packages necessarios para a tarefa inteira
+```{r}
+#install.packages(c('rvest', 'XML'))
+#install.packages('xml2')
+#install.packages("BatchGetSymbols")
+install.packages("ggplot2")
+library(ggplot2)
+```
+
+Eu não possuía certas bibliotecas necessárias para o pacote principal "BatchGetSymbols", então precisei instalar esses outros pacotes e outras duas bibliotecas pelo terminal usando os comandos
+```{bash}
+sudo apt-get install libcurl4-openssl-dev
+sudo apt-get install libxml2-dev
+```
+Atualmente uso Linux Ubuntu e por isso tive esse problema, creio que usando o sistema operacional Windows não ocorrerá o mesmo.  
+
+Agora, com tudo baixado corretamente, posso pegar da biblioteca os dados da yahoo finance
+```{r}
+library(BatchGetSymbols)
+
+```
+
+pegando os tickers 
+
+```{r}
+tickers = c('NVDA', 'MSFT', 'ABNB', 'DELL')
+```
+sera analisado os dados das seguintes variaveis (empresas)
+nvidia 
+microsoft
+airbnb
+dell
+
+A data de inicio a ser analisada será do primeiro dia do ano de 2025, até 1 de junho. Sendo assim, será analisado como foi a primeira metade do ano de cada uma dessas empresas. 
+```{r}
+assets <- BatchGetSymbols(tickers, first.date = '2025-01-01', last.date = Sys.time(), type.return = "log", freq.data = "daily")
+```
+
+"olhando" os dados
+
+```{r}
+glimpse(assets)
+```
+
+selecionando df.tickers para as quatro empresas
+```{r}
+# extraindo o data.frame com todos os preços/retornos
+df_all <- assets$df.tickers
+
+#'NVDA', 'MSFT', 'ABNB', 'DELL'
+airbnb = df_all%>% filter(ticker=='ABNB')
+nvidia  = df_all%>% filter(ticker=='NVDA')
+microsoft = df_all%>% filter(ticker=='MSFT')
+dell = df_all%>% filter(ticker=='DELL')
+
+```
+
+ELABORANDO OS GRAFICOS
+
+para a elaboracao de graficos em R é necessario ter o package ggplot2 carregado em sua máquina
+
+
+ANALISANDO AIRBNB
+
+grafico de precos 
+
+```{r}
+p <- ggplot(airbnb, aes(ref.date, price.close)) + geom_line(color='Coral4')+labs(x = "", y = 'Preço Fechamento', title="Cotação diária da Airbnb", subtitle="período: 2025-01-01 a 31/05/2025", caption = "Fonte: Yahoo Finance")
+p
+```
+
+2º Gráfico: Retornos diários 
+
+```{r}
+daily_returns <- airbnb %>% 
+  select(ref.date,ticker,ret.closing.prices) 
+```
+
+```{r}
+plot.returns <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = ret.closing.prices), color = 'coral3') + labs(x = "", y = 'Retornos', title = "Retornos da Airbnb", subtitle = "Período: 2025-01-11 a 29/05/2025", caption = "Fonte: Yahoo Finance") + theme_light()
+```
+
+
+3º Gráfico: Retornos absolutos 
+```{r}
+plot.volatility <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = abs(ret.closing.prices)), color = 'coral2') + labs( x = "", y = 'Retornos Absolutos', title = "Retornos Absolutos da Airbnb", subtitle = "Período: de 2025-01-01 a 31/05/202", caption = "Fonte: Yahoo Finance") + theme_light()
+```
+
+4º Gráfico: qqplot
+
+```{r}
+qqplot <- ggplot(daily_returns, aes(sample = ret.closing.prices)) + stat_qq(size = 1, color = "coral3") + stat_qq_line() + labs(x = "Teórico", y = 'Amostra', title = "QQplot", subtitle = "Retornos diários da Airbnb", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_light()
+```
+
+5º Gráfico: Histograma
+
+```{r}
+histogram <- ggplot(daily_returns) + geom_histogram(aes(x = ret.closing.prices, y = ..density..), color = "white", fill = "dark grey", linetype = "solid", alpha = 0.8) + geom_density(aes(x = ret.closing.prices, y = ..density..), color = "coral4") + labs(x = "", y = "Densidade", title = "Histograma", subtitle = "Retornos diários da Airbnb", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_light()
+```
+
+Colando os gráficos lado a lado 
+
+```{r}
+cowplot::plot_grid(plot.returns, qqplot, plot.volatility, histogram, nrow = 2)
+```
+
+ANALISANDO NVIDIA
+
+grafico de precos 
+
+```{r}
+p <- ggplot(nvidia, aes(ref.date, price.close)) + geom_line(color='#6E8B3D')+labs(x = "", y = 'preco fechamento', title="Cotação diária da NVIDIA", subtitle="período: 2025-01-01 a 31/05/2025", caption = "Fonte: Yahoo Finance")
+p
+```
+
+2º Gráfico: Retornos diários 
+
+```{r}
+daily_returns <- nvidia %>% 
+  select(ref.date,ticker,ret.closing.prices) 
+```
+
+```{r}
+plot.returns <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = ret.closing.prices), color = '#556b2f') + labs(x = "", y = 'Retornos', title = "Retornos da NVIDIA", subtitle = "Período: 2025-01-01 a 31/05/2025", caption = "Fonte: Yahoo Finance") + theme_minimal()
+```
+
+
+
+3º Gráfico: Retornos absolutos 
+```{r}
+plot.volatility <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = abs(ret.closing.prices)), color = '#a2cd5a') + labs( x = "", y = 'Retornos absolutos', title = "Retornos abs da NVIDIA", subtitle = "Período: de 2025-01-11 a 31/05/202", caption = "Fonte: Yahoo Finance") + theme_light()
+```
+
+4º Gráfico: qqplot
+
+```{r}
+qqplot <- ggplot(daily_returns, aes(sample = ret.closing.prices)) + stat_qq(size = 1, color = '#6e8b3d') + stat_qq_line() + labs(x = "Teórico", y = 'Amostra', title = "QQplot", subtitle = "Retornos diários da NVIDIA", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_light()
+```
+
+5º Gráfico: Histograma
+
+```{r}
+histogram <- ggplot(daily_returns) + geom_histogram(aes(x = ret.closing.prices, y = ..density..), color = "white", fill = "dark grey", linetype = "solid", alpha = 0.8) + geom_density(aes(x = ret.closing.prices, y = ..density..), color = "#a2cd5a") + labs(x = "", y = "Densidade", title = "Histograma", subtitle = "Retornos diários da NVIDIA", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_light()
+```
+
+Colando os gráficos lado a lado 
+
+```{r}
+cowplot::plot_grid(plot.returns, qqplot, plot.volatility, histogram, nrow = 2)
+```
+
+
+ANALISANDO DELL
+
+grafico de precos 
+
+```{r}
+p <- ggplot(dell, aes(ref.date, price.close)) + geom_line(color='#68838b')+labs(x = "", y = 'Preço Fechamento', title="Cotação diária da DELL", subtitle="período: 2025-01-01 a 31/05/2025", caption = "Fonte: Yahoo Finance")
+```
+
+2º Gráfico: Retornos diários 
+
+```{r}
+daily_returns <- dell %>% 
+  select(ref.date,ticker,ret.closing.prices) 
+```
+
+```{r}
+plot.returns <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = ret.closing.prices), color = '#9ac0cd') + labs(x = "", y = 'Retornos', title = "Retornos da DELL", subtitle = "Período: 2025-01-01 a 31/05/2025", caption = "Fonte: Yahoo Finance") + theme_light()
+```
+
+
+
+3º Gráfico: Retornos absolutos 
+```{r}
+plot.volatility <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = abs(ret.closing.prices)), color = '#add8e6') + labs( x = "", y = 'Retornos absolutos', title = "Retornos absolutos da DELL", subtitle = "Período: de 2025-01-01 a 31/05/202", caption = "Fonte: Yahoo Finance") + theme_light()
+```
+
+4º Gráfico: qqplot
+
+```{r}
+qqplot <- ggplot(daily_returns, aes(sample = ret.closing.prices)) + stat_qq(size = 1, color = "#68838b") + stat_qq_line() + labs(x = "Teórico", y = 'Amostra', title = "QQplot", subtitle = "Retornos diários da DELL", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_light()
+```
+
+5º Gráfico: Histograma
+
+```{r}
+histogram <- ggplot(daily_returns) + geom_histogram(aes(x = ret.closing.prices, y = ..density..), color = "white", fill = "dark grey", linetype = "solid", alpha = 0.8) + geom_density(aes(x = ret.closing.prices, y = ..density..), color = "#9ac0cd") + labs(x = "", y = "Densidade", title = "Histograma", subtitle = "Retornos diários da DELL", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_light()
+```
+
+Colando os gráficos lado a lado 
+
+```{r}
+cowplot::plot_grid(plot.returns, qqplot, plot.volatility, histogram, nrow = 2)
+```
+
+
+ANALISANDO MICROSOFT
+
+grafico de precos 
+
+```{r}
+p <- ggplot(microsoft, aes(ref.date, price.close)) + geom_line(color='sienna4')+labs(x = "", y = 'Preço Fechamento', title="Cotação diária da MICROSOFT", subtitle="período: 2025-01-01 a 31/05/2025", caption = "Fonte: Yahoo Finance")
+```
+
+2º Gráfico: Retornos diários 
+
+```{r}
+daily_returns <- microsoft %>% 
+  select(ref.date,ticker,ret.closing.prices) 
+```
+
+```{r}
+plot.returns <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = ret.closing.prices), color = 'sienna3') + labs(x = "", y = 'Retornos', title = "Retornos da MICROSOFT", subtitle = "Período: 2025-01-01 a 31/05/2025", caption = "Fonte: Yahoo Finance") + theme_light()
+```
+
+
+
+3º Gráfico: Retornos absolutos 
+```{r}
+plot.volatility <- ggplot(daily_returns) + geom_line(aes(x = ref.date, y = abs(ret.closing.prices)), color = 'sienna') + labs( x = "", y = 'Retornos absolutos', title = "Retornos Absolutos da MICROSOFT", subtitle = "Período: de 2025-01-01 a 31/05/202", caption = "Fonte: Yahoo Finance") + theme_light()
+```
+
+4º Gráfico: qqplot
+
+```{r}
+qqplot <- ggplot(daily_returns, aes(sample = ret.closing.prices)) + stat_qq(size = 1, color = "sienna3") + stat_qq_line() + labs(x = "Teórico", y = 'Amostra', title = "QQplot", subtitle = "Retornos diários da MICROSOFT", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_light()
+```
+
+5º Gráfico: Histograma
+
+```{r}
+histogram <- ggplot(daily_returns) + geom_histogram(aes(x = ret.closing.prices, y = ..density..), color = "white", fill = "dark grey", linetype = "solid", alpha = 0.8) + geom_density(aes(x = ret.closing.prices, y = ..density..), color = "sienna4") + labs(x = "", y = "Densidade", title = "Histograma", subtitle = "Retornos diários da MICROSOFT", caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") + theme_update()
+```
+
+Colando os gráficos lado a lado 
+
+```{r}
+cowplot::plot_grid(plot.returns, qqplot, plot.volatility, histogram, nrow = 2)
+```
