@@ -1,0 +1,204 @@
+---
+title: "Homework3"
+author: "NathaliaCristinaSantos"
+date: "2025-06-05"
+output: html_document
+---
+
+Lista ARMA: prática
+
+Importante ter os pacotes necessários carregados no sistema
+```{r}
+install.packages("tseries")
+install.packages("forecast")
+install.packages("tidyverse", dependencies = TRUE)
+
+```
+
+```{r}
+library(ggplot2)
+library(BatchGetSymbols)
+library(tidyverse)
+library(ggthemes)
+library(FinTS)
+library(WriteXLS)
+library(xtable)
+library(tbl2xts)
+library(forecast)
+library(tseries)
+library(timeSeries)
+```
+1) Encontre o melhor modelo para os retornos diários do índice IBOVESPA 
+
+Período: 2021 - presente
+
+Importando a serie de retornos diários do IBOVESPA desde 01-01-2021
+```{r}
+#ticker IBOVESPA
+tickers <- c("^BVSP")
+
+ibov <- BatchGetSymbols(tickers, first.date = '2021-01-01', last.date = Sys.time(), type.return = "log", freq.data = "daily")
+
+ibov <- ibov[[2]]
+```
+
+Selecionando os retornos diários da série do IBOVESPA 
+
+```{r}
+daily_returns <- ibov %>%select(ref.date, ret.closing.prices)
+
+date <- daily_returns %>% select(ref.date) %>% rename(date = ref.date) %>% slice(-1)
+
+daily_returns <- daily_returns %>% select(ret.closing.prices) 
+
+#declarando como serie temporal 
+daily_returns = as.ts(daily_returns)
+```
+
+Gerando gráficos de preço, retornos e histogramas da IBOVESPA ao longo do tempo. 
+
+```{r}
+# Preço de fechamento (escala log para enxergar melhor %)
+ggplot(ibov, aes(x = ref.date, y = price.close)) +
+  geom_line(color = "steelblue") +
+  scale_y_log10() +
+  labs(title = "Ibovespa — Preço de Fechamento (log)",
+       x = NULL, y = "Preço (log)") +
+  theme_minimal()
+
+# Retornos diários
+ggplot(daily_returns, aes(x = date, y = r)) +
+  geom_line(color = "salmon") +
+  labs(title = "Retornos logarítmicos diários",
+       x = NULL, y = "Retorno") +
+  theme_minimal()
+
+# Preço de fechamento (escala log para enxergar melhor %)
+ggplot(ibov, aes(x = ref.date, y = price.close)) +
+  geom_line(color = "steelblue") +
+  scale_y_log10() +
+  labs(title = "Ibovespa — Preço de Fechamento (log)",
+       x = NULL, y = "Preço (log)") +
+  theme_minimal()
+
+# Retornos diários
+ggplot(daily_returns, aes(x = date, y = r)) +
+  geom_line(color = "salmon") +
+  labs(title = "Retornos logarítmicos diários",
+       x = NULL, y = "Retorno") +
+  theme_minimal()
+
+#Gerando QQplot
+ggplot(daily_returns, aes(sample = r)) +
+  stat_qq(alpha = .4) +
+  stat_qq_line() +
+  labs(title = "QQ-plot vs. Normal",
+       x = "Quantis teóricos", y = "Quantis amostra") +
+  theme_minimal()
+
+```
+
+
+Identificando o modelo
+
+Usando FAC e FACP
+
+```{r}
+acf(daily_returns, lag.max = 36)
+pacf(daily_returns, lag.max = 36)
+```
+Demonstrando com ggAcf e ggPacf que também calcula a ACF e PACF e devolve um objeto ggplot (gráfico)
+
+Como estou usando linux, foi necessário instalar/atualizar gfortran 
+
+```{r}
+install.packages("forecast", dependencies = TRUE)
+
+```
+
+```{r}
+library(forecast)
+library(ggplot2)
+
+p <- ggAcf(daily_returns, lag.max = 36) +
+       labs(title = "FAC dos retornos do Ibovespa",
+            x = "Defasagem (dias úteis)",
+            y = "Autocorrelação") +
+       theme_minimal()
+
+print(p)
+
+p1 <- ggPacf(daily_returns, lag.max = 36) +
+       labs(title = "PFAC dos retornos do Ibovespa",
+            x = "Defasagem (dias úteis)",
+            y = "Autocorrelação") +
+       theme_minimal()
+
+print(p1)
+```
+
+
+Estimação do modelo ARMA
+
+```{r}
+fit_ar1  <- arima(daily_returns$r, order = c(1, 0, 0))
+fit_arma <- arima(daily_returns$r, order = c(1, 0, 1))
+AIC(fit_ar1)
+AIC(fit_arma)
+```
+Quanto menor o AIC, melhor! Ele indica um ganho de ajuste que compensa o acrescimo de parametros
+
+Eh possivel tambem usar a funcao autoarima, que identifica sozinha a melhor configuracao do modelo 
+```{r}
+certo <- auto.arima(daily_returns)
+```
+
+
+Foi testado com a funcao arima(1,0,0), porem foi identificado que nao era o melhor modelo, pois seus coeficientes e aic/bic não eram significativos 
+
+A função auto.arima, entretanto, identificou que o melhor modelo é arima(0,0,0), mesmo com zero significado relevante. 
+
+É importante lembrar que os modelos variam de acordo com o período analisado. 
+
+Diagnostico do modelo
+
+Verificando se o modelo estimado (o z) é realmente adequado, atraves de uma analise dos resíduos; isso será feito a partir da estatística Q
+
+```{r}
+tsdiag(certo)
+
+Box.test(certo$residuals, lag = 1)
+Box.test(residuals(certo), type = "Ljung")
+acf(residuals(certo))
+pacf(residuals(certo))
+```
+
+
+Gerando gráfico dos resíduos 
+```{r}
+plot.ts(certo$residuals)
+```
+
+
+2) Previsão
+```{r}
+prev <- forecast(fit, h = 5)
+autoplot(fc) +
+  labs(title = "Previsão de 5 passos para os retornos do Ibovespa") +
+  theme_minimal()
+
+```
+
+Valores ajustados x observados 
+```{r}
+plot(daily_returns, col = "salmon")
+lines(fitted(z), col = "black")
+```
+
+3) Utilizando BatchGetSymbols para baixar dados de todas as ações pertencente ao atual índice SP500. idenfique qual ação possui a maior expectativa de retorno 
+
+
+
+4) Separe os dados do SP500 em duas partes, etapa de estimação e etapa de previsão.
+Suponha que você queira, por exemplo, comprar a acao quando a previsao de retorno for positiva, vendendo-a no dia seguinte.
+As previsoes dos modelos ARIMA permitem a construcao de uma estrategia de negociacao lucrativa?
