@@ -9,11 +9,22 @@ Lista ARMA: prática
 
 Importante ter os pacotes necessários carregados no sistema
 ```{r}
-install.packages("tseries")
+#install.packages("tseries")
 install.packages("forecast")
-install.packages("tidyverse", dependencies = TRUE)
+#install.packages('ragg')
+#install.packages("tidyverse", dependencies = TRUE)
 
 ```
+
+Estava com grande dificuldade em instalar o pacote "tidyverse"
+Foi necessário atualizar/instalar as bibliotecas da minha máquina
+```{bash}
+sudo apt-get -y update
+
+sudo apt-get -y install libcurl4-openssl-dev libssl-dev zlib1g-dev make pandoc libfreetype6-dev libjpeg-dev libpng-dev libtiff-dev libicu-dev libfontconfig1-dev libfribidi-dev libharfbuzz-dev libxml2-dev
+
+```
+
 
 ```{r}
 library(ggplot2)
@@ -33,6 +44,11 @@ library(timeSeries)
 Período: 2021 - presente
 
 Importando a serie de retornos diários do IBOVESPA desde 01-01-2021
+
+Selecionando os retornos diários da série do IBOVESPA 
+
+ANALISE DOS FATOS ESTILIZADOS
+Gerando gráficos de preço, retornos e histogramas da IBOVESPA ao longo do tempo. 
 ```{r}
 #ticker IBOVESPA
 tickers <- c("^BVSP")
@@ -40,63 +56,51 @@ tickers <- c("^BVSP")
 ibov <- BatchGetSymbols(tickers, first.date = '2021-01-01', last.date = Sys.time(), type.return = "log", freq.data = "daily")
 
 ibov <- ibov[[2]]
-```
 
-Selecionando os retornos diários da série do IBOVESPA 
+daily_returns <- ibov %>%
+  transmute(date = ref.date,
+            ret.closing.prices) %>% drop_na()
 
-```{r}
-daily_returns <- ibov %>%select(ref.date, ret.closing.prices)
+library(cowplot)
 
-date <- daily_returns %>% select(ref.date) %>% rename(date = ref.date) %>% slice(-1)
+# 1) Retornos
+plot_returns <- ggplot(daily_returns) +
+  geom_line(aes(x = date, y = ret.closing.prices), colour = "coral3") +
+  labs(x = "", y = "Retornos", title = "Retornos do Ibovespa",
+       subtitle = paste0("Período: 2021-01-04 a ", format(max(daily_returns$date), "%d/%m/%Y")),
+       caption = "Fonte: Yahoo Finance") +
+  theme_light()
 
-daily_returns <- daily_returns %>% select(ret.closing.prices) 
+# 2) Volatilidade (retornos absolutos)
+plot_vol <- ggplot(daily_returns) +
+  geom_line(aes(x = date, y = abs(ret.closing.prices)), colour = "coral2") +
+  labs(x = "", y = "Retornos absolutos", title = "Volatilidade do Ibovespa",
+       subtitle = paste0("Período: 2021-01-04 a ", format(max(daily_returns$date), "%d/%m/%Y")),
+       caption = "Fonte: Yahoo Finance") +
+  theme_light()
 
-#declarando como serie temporal 
-daily_returns = as.ts(daily_returns)
-```
-
-Gerando gráficos de preço, retornos e histogramas da IBOVESPA ao longo do tempo. 
-
-```{r}
-# Preço de fechamento (escala log para enxergar melhor %)
-ggplot(ibov, aes(x = ref.date, y = price.close)) +
-  geom_line(color = "steelblue") +
-  scale_y_log10() +
-  labs(title = "Ibovespa — Preço de Fechamento (log)",
-       x = NULL, y = "Preço (log)") +
-  theme_minimal()
-
-# Retornos diários
-ggplot(daily_returns, aes(x = date, y = r)) +
-  geom_line(color = "salmon") +
-  labs(title = "Retornos logarítmicos diários",
-       x = NULL, y = "Retorno") +
-  theme_minimal()
-
-# Preço de fechamento (escala log para enxergar melhor %)
-ggplot(ibov, aes(x = ref.date, y = price.close)) +
-  geom_line(color = "steelblue") +
-  scale_y_log10() +
-  labs(title = "Ibovespa — Preço de Fechamento (log)",
-       x = NULL, y = "Preço (log)") +
-  theme_minimal()
-
-# Retornos diários
-ggplot(daily_returns, aes(x = date, y = r)) +
-  geom_line(color = "salmon") +
-  labs(title = "Retornos logarítmicos diários",
-       x = NULL, y = "Retorno") +
-  theme_minimal()
-
-#Gerando QQplot
-ggplot(daily_returns, aes(sample = r)) +
-  stat_qq(alpha = .4) +
+# 3) QQ‑plot
+plot_qq <- ggplot(daily_returns, aes(sample = ret.closing.prices)) +
+  stat_qq(size = 1, colour = "coral3") +
   stat_qq_line() +
-  labs(title = "QQ-plot vs. Normal",
-       x = "Quantis teóricos", y = "Quantis amostra") +
-  theme_minimal()
+  labs(x = "Teórico", y = "Amostra", title = "QQ‑plot",
+       subtitle = "Retornos do Ibovespa",
+       caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") +
+  theme_light()
 
+# 4) Histograma
+plot_hist <- ggplot(daily_returns) +
+  geom_histogram(aes(x = ret.closing.prices, y = ..density..), bins = 60,
+                 colour = "white", fill = "darkgrey", alpha = 0.8) +
+  geom_density(aes(x = ret.closing.prices, y = ..density..), colour = "coral4") +
+  labs(x = "", y = "Densidade", title = "Histograma",
+       subtitle = "Retornos do Ibovespa",
+       caption = "Fonte: Elaborado a partir de dados da Yahoo Finance") +
+  theme_light()
+
+cowplot::plot_grid(plot_returns, plot_qq, plot_vol, plot_hist, nrow = 2)
 ```
+
 
 
 Identificando o modelo
@@ -110,6 +114,19 @@ pacf(daily_returns, lag.max = 36)
 Demonstrando com ggAcf e ggPacf que também calcula a ACF e PACF e devolve um objeto ggplot (gráfico)
 
 Como estou usando linux, foi necessário instalar/atualizar gfortran 
+
+```{bash}
+sudo apt-get update
+sudo apt-get install -y build-essential gfortran
+
+sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev \ libblas-dev liblapack-dev
+```
+caso de algum erro de ERROR: failed to lock directory
+execute 
+```{bash}
+rm -rf "/home/nati/R/x86_64-pc-linux-gnu-library/4.5/00LOCK-forecast"
+```
+
 
 ```{r}
 install.packages("forecast", dependencies = TRUE)
@@ -141,8 +158,8 @@ print(p1)
 Estimação do modelo ARMA
 
 ```{r}
-fit_ar1  <- arima(daily_returns$r, order = c(1, 0, 0))
-fit_arma <- arima(daily_returns$r, order = c(1, 0, 1))
+fit_ar1  <- arima(daily_returns$ret.closing.prices, order = c(1, 0, 0))
+fit_arma <- arima(daily_returns$ret.closing.prices, order = c(1, 0, 1))
 AIC(fit_ar1)
 AIC(fit_arma)
 ```
@@ -150,7 +167,8 @@ Quanto menor o AIC, melhor! Ele indica um ganho de ajuste que compensa o acresci
 
 Eh possivel tambem usar a funcao autoarima, que identifica sozinha a melhor configuracao do modelo 
 ```{r}
-certo <- auto.arima(daily_returns)
+fit <- auto.arima(daily_returns$ret.closing.prices, stepwise = FALSE, approximation = FALSE)
+fit 
 ```
 
 
@@ -165,34 +183,24 @@ Diagnostico do modelo
 Verificando se o modelo estimado (o z) é realmente adequado, atraves de uma analise dos resíduos; isso será feito a partir da estatística Q
 
 ```{r}
-tsdiag(certo)
+# Ljung–Box em vários lags
+Box.test(residuals(fit), lag = 20, type = "Ljung")
 
-Box.test(certo$residuals, lag = 1)
-Box.test(residuals(certo), type = "Ljung")
-acf(residuals(certo))
-pacf(residuals(certo))
+ggAcf(residuals(fit), lag.max = 36) +
+  labs(title = "FAC dos resíduos", x = "Defasagem") +
+  theme_minimal()
+
+ggPacf(residuals(fit), lag.max = 36) +
+  labs(title = "FACP dos resíduos", x = "Defasagem") +
+  theme_minimal()
 ```
-
-
-Gerando gráfico dos resíduos 
-```{r}
-plot.ts(certo$residuals)
-```
-
 
 2) Previsão
 ```{r}
-prev <- forecast(fit, h = 5)
+fc <- forecast(fit, h = 5)
 autoplot(fc) +
   labs(title = "Previsão de 5 passos para os retornos do Ibovespa") +
   theme_minimal()
-
-```
-
-Valores ajustados x observados 
-```{r}
-plot(daily_returns, col = "salmon")
-lines(fitted(z), col = "black")
 ```
 
 3) Utilizando BatchGetSymbols para baixar dados de todas as ações pertencente ao atual índice SP500. idenfique qual ação possui a maior expectativa de retorno 
