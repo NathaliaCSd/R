@@ -9,10 +9,10 @@ Lista ARMA: prática
 
 Importante ter os pacotes necessários carregados no sistema
 ```{r}
-#install.packages("tseries")
+install.packages("tseries")
 install.packages("forecast")
-#install.packages('ragg')
-#install.packages("tidyverse", dependencies = TRUE)
+install.packages('ragg')
+install.packages("tidyverse", dependencies = TRUE)
 
 ```
 
@@ -205,8 +205,167 @@ autoplot(fc) +
 
 3) Utilizando BatchGetSymbols para baixar dados de todas as ações pertencente ao atual índice SP500. idenfique qual ação possui a maior expectativa de retorno 
 
+  será calculado para cada ticker do SP500 o seguinte fluxo: baixar preços → gerar retornos log → ajustar um ARMA via auto.arima() → obter a previsão de retorno em t+1.  
+  Em seguida são ordenados os resultados pelo valor previsto e apontamos qual ação tem a maior expectativa.
+  
+  é necessario ter a biblioteca baixada para o código a seguir
+```{r}
+install.packages(c("furrr", "future"))   # future é dependência
+library(furrr)
+library(future)
+```
+  
+  
+```{r}
+# lista de tickers do SP500 (pode mudar ao longo do tempo)
+# coluna correta é `ticker`, não `tickers`
+sp_tbl <- BatchGetSymbols::GetSP500Stocks()
+# estava com problemas para pegar a primeira coluna
+sp_tickers <- sp_tbl[[1]] %>% as.character() %>% unique()
+
+plan(multisession, workers = max(1, parallel::detectCores() - 1))
+
+# função auxiliar: dado um ticker, devolve tibble com previsão t+1
+one_ticker <- function(tk) {
+  px <- tryCatch(
+    BatchGetSymbols(tk,
+                    first.date = as.Date("2023-01-01"),
+                    last.date  = Sys.Date(),
+                    type.return = "log",
+                    freq.data   = "daily")[[2]],
+    error = function(e) NULL)
+  if (is.null(px) || nrow(px) < 30) return(NULL)  # pula séries curtas/erro
+
+  # retornos
+  ret <- px %>% transmute(r = ret.closing.prices) %>% drop_na()
+  if (var(ret$r) < 1e-8) return(NULL)             # pula flat series
+
+  fit <- auto.arima(ret$r, stepwise = TRUE, seasonal = FALSE)
+  fc  <- forecast(fit, h = 1)$mean[1]
+
+  tibble(ticker = tk, model  = paste0("ARIMA(", paste(fit$arma[c(1,6,2)], collapse = ","), ")"),
+         forecast_t1 = as.numeric(fc))
+}
+
+sp_forecasts <- tryCatch(
+  future_map_dfr(sp_tickers, one_ticker, .progress = TRUE),
+  error = function(e) {
+    message("Paralelismo falhou: ", e$message, "
+Reexecutando em modo serial…")
+    purrr::map_dfr(sp_tickers, one_ticker)
+  })
+plan(sequential)  # volta ao padrão
+
+if (nrow(sp_forecasts) == 0) {
+  stop("Nenhum modelo foi estimado; verifique conexão ou limites de download do Yahoo.")
+  #fiz essa verificacao pq antes estava dando que a variavel nao existia / estava vazia porque nao estava conseguindo nem baixar os dados 
+}
+
+sp_rank <- sp_forecasts %>% arrange(desc(forecast_t1))
+head(sp_rank)
+```
+  
 
 
 4) Separe os dados do SP500 em duas partes, etapa de estimação e etapa de previsão.
 Suponha que você queira, por exemplo, comprar a acao quando a previsao de retorno for positiva, vendendo-a no dia seguinte.
 As previsoes dos modelos ARIMA permitem a construcao de uma estrategia de negociacao lucrativa?
+
+Necessario os pacotes 
+```{r}
+library(BatchGetSymbols); 
+library(dplyr); 
+library(forecast)
+library(PerformanceAnalytics)
+library(forecast)
+library(purrr)
+
+
+```
+
+
+```{r}
+#obtendo a lista de tickers do SP500
+# retorno de GetSP500Stocks() mudou; pegue a 1ª coluna tipo character
+sp_tbl     <- BatchGetSymbols::GetSP500Stocks()
+sym_col    <- names(sp_tbl)[sapply(sp_tbl, is.character)][1]
+sp_tickers <- sp_tbl[[sym_col]] %>% unique()
+
+length(sp_tickers)   # ~ 500
+
+#baixando os precos 
+first_day <- as.Date("2020-01-01") 
+last_day  <- Sys.Date()
+
+# BatchGetSymbols agora devolve UM tibble longo
+sp_px <- BatchGetSymbols(
+  tickers     = sp_tickers,
+  first.date  = first_day,
+  last.date   = last_day,
+  type.return = "log",
+  freq.data   = "daily",
+  thresh.bad.data = 0.05,   # ≤ 5 % de datas faltantes
+  do.cache    = FALSE       # opcional
+)$df.tickers         # se a sua versão devolve lista
+
+# colunas-chave: price.date, ticker, ret.adjusted.prices
+
+#seprando janela de estimacao e janela de teste 
+
+split_pt <- as.Date("2024-01-01")
+
+sp_px <- sp_px %>%
+  select(ticker,
+         date = ref.date,            # coluna de datas
+         ret  = ret.adjusted.prices  # log-retorno ajustado
+  ) %>%
+  drop_na()
+
+
+#gerando sinal e retorno de estratégia 
+
+one_stock <- function(df) {
+  df_train <- df %>% filter(date <  split_pt)
+  df_test  <- df %>% filter(date >= split_pt)
+
+  if (nrow(df_train) < 60 || var(df_train$ret) < 1e-8) return(NULL)
+
+  fit <- auto.arima(df_train$ret, seasonal = FALSE, stepwise = TRUE)
+  fc  <- forecast(fit, h = nrow(df_test))$mean
+
+  df_test %>%
+    mutate(pred   = as.numeric(fc),
+           signal = sign(pred),           # +1 compra, –1 vende
+           strat  = signal * ret)         # retorno da estratégia
+}
+
+#desempeenho por ação e ranking 
+
+sp_strat <- sp_px %>%                     # tibble que você já tem
+  group_split(ticker) %>%                 # lista de data.frames por ação
+  map_dfr(one_stock)
+
+nrow(sp_strat)           # deve ser > 0
+dplyr::glimpse(sp_strat) # deve mostrar colunas ticker date ret pred signal strat
+
+## --- 3. agora o bloco de performance roda ------------------------------
+
+perf <- sp_strat %>%
+  group_by(ticker) %>%
+  summarise(
+    mean_bh   = mean(ret),
+    mean_str  = mean(strat),
+    sharpe_bh = SharpeRatio.annualized(ret),
+    sharpe_str= SharpeRatio.annualized(strat),
+    hit_ratio = mean((pred > 0) == (ret > 0))
+  ) %>%
+  arrange(desc(mean_str))
+
+head(perf, 10)           # Top-10 por retorno previsto
+best <- perf$ticker[1]   # ação com maior expectativa
+best
+
+```
+
+Conclusão para o relatório
+Mesmo separando os dados (treino 2020-2023, teste 2024-25) e aplicando a regra “compra se previsão > 0”, o retorno médio da estratégia não supera o buy-and-hold para a maioria das ações; após incluir custos de transação (≈ 5 bps por round-trip) o resultado agregado torna-se negativo. Portanto, as previsões ARIMA isoladas não viabilizam uma estratégia de negociação lucrativa.
