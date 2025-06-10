@@ -1,0 +1,15 @@
+---
+title: "HomeWork4"
+author: "NathaliaCristinaSantos"
+date: "2025-06-09"
+output: html_document
+---
+Roteiro: estimação de modelos da família ARCH
+
+1. ajustar um modelo para a média
+
+2.  verificar a existência de heterocedasticidade condicional nos resíduos ao quadrado do modelo ajustado acima (usar a FAC  e FACP para os quadrados, ou a estatística Q ou ainda o teste LM para efeitos ARCH). 
+
+3. ajustar modelo para a variância condicional
+
+4. verificar se o modelo é adequado aplicando os mesmos testes do item 2. Mas nesse caso, não deve haver indícios de heterocedasticidade condicional, uma vez que ela já foi modelada no item 3. Caso ainda haja, é preciso ajustar o modelo para a variância condicional. 
