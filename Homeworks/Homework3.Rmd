@@ -6,9 +6,15 @@ output: html_document
 ---
 
 Lista ARMA: prática
+```{r}
+install.packages("BatchGetSymbols")
+library(BatchGetSymbols)
+
+```
+
 
 Importante ter os pacotes necessários carregados no sistema
-```{r}
+```{r, eval=FALSE}
 install.packages("tseries")
 install.packages("forecast")
 install.packages('ragg')
@@ -18,7 +24,7 @@ install.packages("tidyverse", dependencies = TRUE)
 
 Estava com grande dificuldade em instalar o pacote "tidyverse"
 Foi necessário atualizar/instalar as bibliotecas da minha máquina
-```{bash}
+```{bash, eval=FALSE}
 sudo apt-get -y update
 
 sudo apt-get -y install libcurl4-openssl-dev libssl-dev zlib1g-dev make pandoc libfreetype6-dev libjpeg-dev libpng-dev libtiff-dev libicu-dev libfontconfig1-dev libfribidi-dev libharfbuzz-dev libxml2-dev
@@ -26,7 +32,7 @@ sudo apt-get -y install libcurl4-openssl-dev libssl-dev zlib1g-dev make pandoc l
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 library(ggplot2)
 library(BatchGetSymbols)
 library(tidyverse)
@@ -115,7 +121,7 @@ Demonstrando com ggAcf e ggPacf que também calcula a ACF e PACF e devolve um ob
 
 Como estou usando linux, foi necessário instalar/atualizar gfortran 
 
-```{bash}
+```{bash, eval=FALSE}
 sudo apt-get update
 sudo apt-get install -y build-essential gfortran
 
@@ -123,19 +129,19 @@ sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev \ libblas-de
 ```
 caso de algum erro de ERROR: failed to lock directory
 execute 
-```{bash}
+```{bas, eval=FALSEh}
 rm -rf "/home/nati/R/x86_64-pc-linux-gnu-library/4.5/00LOCK-forecast"
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 install.packages("forecast", dependencies = TRUE)
-
+library(forecast)
+library(ggplot2)
 ```
 
 ```{r}
-library(forecast)
-library(ggplot2)
+
 
 p <- ggAcf(daily_returns, lag.max = 36) +
        labs(title = "FAC dos retornos do Ibovespa",
@@ -209,7 +215,7 @@ autoplot(fc) +
   Em seguida são ordenados os resultados pelo valor previsto e apontamos qual ação tem a maior expectativa.
   
   é necessario ter a biblioteca baixada para o código a seguir
-```{r}
+```{r, eval=FALSE}
 install.packages(c("furrr", "future"))   # future é dependência
 library(furrr)
 library(future)
@@ -272,7 +278,7 @@ Suponha que você queira, por exemplo, comprar a acao quando a previsao de retor
 As previsoes dos modelos ARIMA permitem a construcao de uma estrategia de negociacao lucrativa?
 
 Necessario os pacotes 
-```{r}
+```{r, eval=FALSE}
 library(BatchGetSymbols); 
 library(dplyr); 
 library(forecast)
@@ -321,22 +327,22 @@ sp_px <- BatchGetSymbols(
 split_pt <- as.Date("2024-01-01")                # treino ≤ 2023-12-29
 
 one_stock <- function(df) {
-  train <- df[df$date <  split_pt, ]
+  train <- df[df$date < split_pt, ]
   test  <- df[df$date >= split_pt, ]
 
   if (nrow(train) < 30 || nrow(test) == 0 || var(train$ret) < 1e-8)
     return(NULL)
 
-  fit <- auto.arima(train$ret, seasonal = FALSE, stepwise = TRUE)
-  fc  <- forecast(fit, h = nrow(test))$mean          # previsão h = nº obs teste
+  fit <- forecast::auto.arima(train$ret, seasonal = FALSE, stepwise = TRUE)
+  fc  <- forecast::forecast(fit, h = nrow(test))$mean
 
-  transform(
-    test,
-    pred   = as.numeric(fc),
-    signal = sign(pred),                             # +1 compra, –1 vende
-    strat  = signal * ret                            # retorno da estratégia
-  )
+  test$pred   <- as.numeric(fc)
+  test$signal <- sign(test$pred)
+  test$strat  <- test$signal * test$ret
+
+  test
 }
+
 
 # 4 ───────────────────────────  aplicar a cada ação ──────────────────────────
 
@@ -351,10 +357,10 @@ stopifnot(nrow(sp_strat) > 0)   # deve passar agora
 perf <- sp_strat %>%
   group_by(ticker) %>%
   summarise(
-    mean_bh    = mean(ret),
-    mean_str   = mean(strat),
-    sharpe_bh  = SharpeRatio.annualized(ret),
-    sharpe_str = SharpeRatio.annualized(strat),
+    mean_bh    = mean(ret, na.rm=TRUE),
+    mean_str   = mean(strat, na.rm=TRUE),
+    sharpe_bh  = mean(ret, na.rm=TRUE) / sd(ret, na.rm=TRUE) * sqrt(252),
+    sharpe_str = mean(strat, na.rm=TRUE) / sd(strat, na.rm=TRUE) * sqrt(252),
     hit_ratio  = mean((pred > 0) == (ret > 0)),
     .groups    = "drop"
   ) %>%

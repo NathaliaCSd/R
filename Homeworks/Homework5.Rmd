@@ -1,0 +1,127 @@
+---
+title: "Homework5"
+author: "NathaliaCristinaSantos"
+date: "2025-06-10"
+output:
+  html_document: default
+code_folding: none
+---
+
+Homework final: Modelagem das ações da VALE
+
+
+
+```{r setup, include=FALSE}
+# carregar todas as bibliotecas necessárias
+library(BatchGetSymbols)
+library(rugarch)
+library(tidyverse)
+library(FinTS)
+library(gridExtra)   
+library(forecast) 
+
+# baixar log-retornos da ação VALE3.SA desde março/2019
+raw <- BatchGetSymbols("VALE3.SA",
+                      first.date   = "2019-03-21",
+                      last.date    = Sys.Date(),
+                      type.return  = "log",
+                      freq.data    = "daily")[[2]]
+
+# extrair vetor numérico de retornos, removendo NAs
+ret <- raw %>%
+  arrange(ref.date) %>%
+  pull(ret.adjusted.prices) %>%
+  na.omit()
+length(ret)  # deve ser >> 30
+
+# lags = 1, 2 e 10
+for (L in c(1,2,10)) {
+  cat("\nArchTest, lag =", L, "\n")
+  print(FinTS::ArchTest(ret, lags = L, demean = TRUE))
+}
+# 3) Especificações dos modelos
+
+# GARCH(1,1)
+spec_garch_norm <- ugarchspec(
+  variance.model     = list(model = "sGARCH",  garchOrder = c(1,1)),
+  mean.model         = list(armaOrder = c(0,0), include.mean = FALSE),
+  distribution.model = "norm"
+)
+spec_garch_std <- ugarchspec(
+  variance.model     = list(model = "sGARCH",  garchOrder = c(1,1)),
+  mean.model         = list(armaOrder = c(0,0), include.mean = FALSE),
+  distribution.model = "std"
+)
+
+# EGARCH(1,1)
+spec_egarch_norm <- ugarchspec(
+  variance.model     = list(model = "eGARCH", garchOrder = c(1,1)),
+  mean.model         = list(armaOrder = c(0,0), include.mean = FALSE),
+  distribution.model = "norm"
+)
+spec_egarch_std <- ugarchspec(
+  variance.model     = list(model = "eGARCH", garchOrder = c(1,1)),
+  mean.model         = list(armaOrder = c(0,0), include.mean = FALSE),
+  distribution.model = "std"
+)
+
+# GJR-GARCH(1,1)
+spec_gjr_norm <- ugarchspec(
+  variance.model     = list(model = "gjrGARCH", garchOrder = c(1,1)),
+  mean.model         = list(armaOrder = c(0,0), include.mean = FALSE),
+  distribution.model = "norm"
+)
+spec_gjr_std <- ugarchspec(
+  variance.model     = list(model = "gjrGARCH", garchOrder = c(1,1)),
+  mean.model         = list(armaOrder = c(0,0), include.mean = FALSE),
+  distribution.model = "std"
+)
+
+# agora monte a lista de specs
+specs <- list(
+  GARCH_N  = spec_garch_norm,
+  GARCH_T  = spec_garch_std,
+  EGARCH_N = spec_egarch_norm,
+  EGARCH_T = spec_egarch_std,
+  GJR_N    = spec_gjr_norm,
+  GJR_T    = spec_gjr_std
+)
+
+fits <- imap(specs, ~ {
+  fit <- ugarchfit(spec = .x, data = ret, solver = "solnp", solver.control = list(trace = 0))
+  cat("\nModelo", .y, "— convergiu?:", fit@fit$convergence, "\n")
+  return(fit)
+})
+
+# extrair AIC e BIC
+info <- map_dfr(fits, ~ as_tibble(t(infocriteria(.x))), .id = "Modelo")
+
+# persistência α+β
+pers <- map_dbl(fits, persistence)
+
+# half-life
+half_life <- log(0.5) / log(pers)
+
+# tabela consolidada
+results <- info %>%
+  mutate(Persistência = pers[Modelo],
+         Half_Life     = half_life[Modelo])
+
+knitr::kable(results, digits = 4, caption = "Critérios e Persistência dos Modelos")
+
+# para cada ajuste, plot FAC e FACP dos resíduos padronizados ao quadrado
+plots <- imap(fits, ~ {
+  R <- residuals(.x, standardize = TRUE)
+  p1 <- ggAcf(R^2, lag.max = 20) + labs(title = paste(.y, "— FAC resíduos²"))
+  p2 <- ggPacf(R^2, lag.max = 20) + labs(title = paste(.y, "— FACP resíduos²"))
+  grid.arrange(p1, p2, ncol = 2)
+})
+
+# fazer forecast 10 passos à frente para cada modelo
+forecasts <- map(fits, ~ ugarchforecast(.x, n.ahead = 10))
+
+# exemplificar com o modelo GARCH_N
+print(forecasts$GARCH_N)
+plot(forecasts$GARCH_N, which = 1)  # previsão ± intervalo
+
+```
